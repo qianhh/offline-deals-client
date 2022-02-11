@@ -29,15 +29,13 @@ import (
 var logging = log.Logger("syncer")
 
 type Deal struct {
-	Miner      address.Address
-	Client     address.Address
-	DataCid    cid.Cid
-	Verified   bool
-	PropCid    cid.Cid
-	StartEpoch abi.ChainEpoch
-	EndEpoch   abi.ChainEpoch
-	PieceSize  abi.PaddedPieceSize
-	PieceCid   cid.Cid
+	Miner     address.Address
+	Client    address.Address
+	DataCid   cid.Cid
+	Verified  bool
+	PropCid   cid.Cid
+	PieceSize abi.PaddedPieceSize
+	PieceCid  cid.Cid
 }
 
 type Deals struct {
@@ -110,6 +108,17 @@ func (s *Syncer) save() {
 	}
 }
 
+func (s *Syncer) resetIncompleteStatus() {
+	for _, di := range s.deals {
+		switch di.Status {
+		case StartDownload:
+			di.Status = ReadyDownload
+		case StartImport:
+			di.Status = FinishDownload
+		}
+	}
+}
+
 func (s *Syncer) Run(ctx context.Context) {
 	defer func() {
 		s.save()
@@ -118,11 +127,22 @@ func (s *Syncer) Run(ctx context.Context) {
 	}()
 
 	s.load()
+	s.resetIncompleteStatus()
 
+	// TODO test
+	//{"rootCid": "QmYnsC47dUxaWFeoo3bvtoARw79TtdFgAn3UDkQKo1J1NF", "pieceCid": "baga6ea4seaqjolucsdys232q5ogwmraifh4i2g7qaasy23awnu3mioqvfhri4gy", "unpaddedPieceSize": 8323072}
+	dataCid, _ := cid.Decode("QmYnsC47dUxaWFeoo3bvtoARw79TtdFgAn3UDkQKo1J1NF")
+	propCid, _ := cid.Decode("bafyreibf2znjlonzbpn6pwbhvugiauto2g37zv4pb4wargpoedeglo44zq")
 	s.deals["test"] = &DealInfo{
-		Deal:    &Deal{},
+		Deal: &Deal{
+			DataCid: dataCid,
+			PropCid: propCid,
+		},
 		Updated: time.Now(),
 	}
+
+	//./lotus client deal --manual-piece-cid=baga6ea4seaqjolucsdys232q5ogwmraifh4i2g7qaasy23awnu3mioqvfhri4gy --manual-piece-size=8323072 --manual-stateless-deal QmYnsC47dUxaWFeoo3bvtoARw79TtdFgAn3UDkQKo1J1NF t01000 0 518400
+	//bafyreibf2znjlonzbpn6pwbhvugiauto2g37zv4pb4wargpoedeglo44zq
 
 	go func() {
 		for {
@@ -217,12 +237,20 @@ func (s *Syncer) getOfflineDeals(ctx context.Context) (*Deals, error) {
 		return nil, err
 	}
 
-	var data Deals
+	type Resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data *Deals `json:"data"`
+	}
+	var data Resp
 	if err = json.Unmarshal(payload, &data); err != nil {
 		logging.Errorw("json unmarshal failed", "url", req.RequestURI, "payload", string(payload), "error", err)
 		return nil, err
 	}
-	return &data, nil
+	if data.Code != 200 {
+		return nil, xerrors.New(data.Msg)
+	}
+	return data.Data, nil
 }
 
 func (s *Syncer) getDataAuth(ctx context.Context) (*remoteclient.Config, error) {
@@ -248,12 +276,20 @@ func (s *Syncer) getDataAuth(ctx context.Context) (*remoteclient.Config, error) 
 		return nil, err
 	}
 
-	var data remoteclient.Config
+	type Resp struct {
+		Code int                  `json:"code"`
+		Msg  string               `json:"msg"`
+		Data *remoteclient.Config `json:"data"`
+	}
+	var data Resp
 	if err = json.Unmarshal(payload, &data); err != nil {
 		logging.Errorw("json unmarshal failed", "url", req.RequestURI, "payload", string(payload), "error", err)
 		return nil, err
 	}
-	return &data, nil
+	if data.Code != 200 {
+		return nil, xerrors.New(data.Msg)
+	}
+	return data.Data, nil
 }
 
 func makeRequest(ctx context.Context, url string, auth string, body io.Reader) (req *http.Request, err error) {
@@ -344,19 +380,23 @@ func (s *Syncer) Download(ctx context.Context, deal *DealInfo) error {
 	err = CarExport(ctx, deal.DataCid, bstore, carF, 8)
 	if err != nil {
 		logging.Errorw("generate car file error", "cid", deal.DataCid.String(), "error", err)
-		logging.Fatal(err)
+		return err
 	}
 	logging.Infof("generate car file cost %v", time.Now().Sub(start))
 	return nil
 }
 
 func (s *Syncer) Import(ctx context.Context, deal *DealInfo) error {
+	var err error
 	path := filepath.Join(s.dataDir, fmt.Sprint(deal.DataCid.String(), ".car"))
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return err
+	}
 	if deal.DataSize != GetSize(path) {
 		deal.Status = ReadyDownload
 		return xerrors.New("verify data size failed")
 	}
-	var err error
 	deal.Status = StartImport
 	defer func() {
 		if err != nil {
@@ -384,7 +424,7 @@ func (s *Syncer) Import(ctx context.Context, deal *DealInfo) error {
 	contentReader := bytes.NewReader(mJson)
 	// TODO get auth token
 	token := getNodeApiToken()
-	req, err := makeRequest(ctx, url, token, contentReader)
+	req, err := makeRequest(ctx, url, strings.Join([]string{"Bearer", token}, " "), contentReader)
 	resp, err := s.cli.Do(req)
 	if err != nil {
 		logging.Errorf("request rpc api failed, %v", err)

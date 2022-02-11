@@ -79,7 +79,7 @@ var DaemonCmd = &cli.Command{
 			return err
 		}
 
-		syncer := syncer.NewSyncer(filepath.Join(ddir, "cache"), carDir)
+		syncer := syncer.NewSyncer(filepath.Join(ddir, "deals"), carDir)
 		ctx, cancel := context.WithCancel(context.Background())
 		exitCh := make(chan struct{})
 		go func() {
