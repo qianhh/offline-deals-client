@@ -335,17 +335,13 @@ func (s *Syncer) processOfflineDeals(ctx context.Context) {
 	}
 }
 
-func (s *Syncer) GetRemoteBlockstore(ctx context.Context) (blockstore.Blockstore, error) {
+func (s *Syncer) GetRemoteClient(ctx context.Context) (*remoteclient.Client, error) {
 	cfg, err := s.getDataAuth(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cli, err := remoteclient.NewClient(ctx, cfg)
-	if err != nil {
-		panic(err)
-	}
-	bstore := blockstore.NewBlockstore(cli.GetDataStore())
-	return bstore, nil
+	logging.Debugw("get data auth success", "config", cfg)
+	return remoteclient.NewClient(ctx, cfg)
 }
 
 func (s *Syncer) Download(ctx context.Context, deal *DealInfo) error {
@@ -361,10 +357,11 @@ func (s *Syncer) Download(ctx context.Context, deal *DealInfo) error {
 		}
 		s.save()
 	}()
-	bstore, err := s.GetRemoteBlockstore(ctx)
+	cli, err := s.GetRemoteClient(ctx)
 	if err != nil {
 		return err
 	}
+	bstore := blockstore.NewBlockstore(cli.GetDataStore())
 
 	if deal.DataSize > 0 && deal.DataSize == GetSize(path) {
 		return nil
@@ -450,6 +447,10 @@ type nodeGetter struct {
 }
 
 func (ng *nodeGetter) Get(ctx context.Context, cid cid.Cid) (format.Node, error) {
+	start := time.Now()
+	defer func() {
+		logging.Debugf("get node by cid %s, cost time %v", cid.String(), time.Since(start))
+	}()
 	nd, err := ng.ng.Get(cid)
 	if err != nil {
 		return nil, err
