@@ -404,8 +404,7 @@ func (s *Syncer) Import(ctx context.Context, deal *DealInfo) error {
 		s.save()
 	}()
 
-	// TODO import to market or miner
-
+	// import to market or miner
 	url := getNodeApiUrl()
 	rpcJsonMsg := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -419,7 +418,7 @@ func (s *Syncer) Import(ctx context.Context, deal *DealInfo) error {
 		return err
 	}
 	contentReader := bytes.NewReader(mJson)
-	// TODO get auth token
+	// get auth token
 	token := getNodeApiToken()
 	req, err := makeRequest(ctx, url, strings.Join([]string{"Bearer", token}, " "), contentReader)
 	resp, err := s.cli.Do(req)
@@ -437,7 +436,7 @@ func (s *Syncer) Import(ctx context.Context, deal *DealInfo) error {
 		return err
 	}
 
-	logging.Debug(payload)
+	logging.Debug(string(payload))
 
 	return nil
 }
