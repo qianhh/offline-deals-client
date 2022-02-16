@@ -94,6 +94,7 @@ func (s *Syncer) load() {
 			logging.Errorw("load cache deals failed", "error", err)
 		}
 	}
+	logging.Debugw("load deals", "deals", s.deals)
 }
 
 func (s *Syncer) save() {
@@ -106,6 +107,7 @@ func (s *Syncer) save() {
 	if err = enc.Encode(s.deals); err != nil {
 		logging.Errorw("save cache deals failed", "error", err)
 	}
+	logging.Debugw("save deals", "deals", s.deals)
 }
 
 func (s *Syncer) resetIncompleteStatus() {
