@@ -1,3 +1,7 @@
 [api]
   endpoint = "https://datasets.filedrive.io/"
   token = ""
+
+[car]
+  autoClean = false
+  cleanPeriod = "24h"

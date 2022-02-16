@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/ipfs/go-log/v2"
 	"github.com/jinzhu/configor"
+	"time"
 )
 
 var Config *TomlConfig
@@ -24,6 +25,10 @@ func GetDefaultConfig() *TomlConfig {
 			Endpoint: "https://datasets.filedrive.io/",
 			Token:    "",
 		},
+		Car: TomlCar{
+			AutoClean:   false,
+			CleanPeriod: "24h",
+		},
 	}
 }
 
@@ -32,6 +37,20 @@ type TomlApi struct {
 	Token    string `toml:"token"`
 }
 
+type TomlCar struct {
+	AutoClean   bool   `toml:"autoClean"`
+	CleanPeriod string `toml:"cleanPeriod"`
+}
+
+func (t TomlCar) GetCleanPeriod() time.Duration {
+	d, err := time.ParseDuration(t.CleanPeriod)
+	if err != nil {
+		logging.Fatalf("parse cleanPeriod error, %v", err)
+	}
+	return d
+}
+
 type TomlConfig struct {
 	Api TomlApi `toml:"api"`
+	Car TomlCar `toml:"car"`
 }

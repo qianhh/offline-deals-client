@@ -129,6 +129,6 @@ var InitCmd = &cli.Command{
 		if err := toml.NewEncoder(&buffer).Encode(config); err != nil {
 			return err
 		}
-		return ioutil.WriteFile(configFile, buffer.Bytes(), 0777)
+		return ioutil.WriteFile(configFile, buffer.Bytes(), 0666)
 	},
 }

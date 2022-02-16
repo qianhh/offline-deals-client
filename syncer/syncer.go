@@ -327,12 +327,21 @@ func (s *Syncer) processOfflineDeals(ctx context.Context) {
 		case FinishDownload:
 			s.pushToImportQueue(di)
 		case FinishImport:
-			if time.Since(di.Updated).Hours() > 24 {
-				// TODO should delete car file？
+			if time.Since(di.Updated).Minutes() > settings.Config.Car.GetCleanPeriod().Minutes() {
 				delete(s.deals, k)
+				// delete car file
+				if settings.Config.Car.AutoClean {
+					path := filepath.Join(s.dataDir, fmt.Sprint(di.DataCid.String(), ".car"))
+					_ = os.RemoveAll(path)
+				}
+				continue
 			}
 		}
+		if time.Since(di.Updated).Hours() >= 24 {
+			delete(s.deals, k)
+		}
 	}
+	s.save()
 }
 
 func (s *Syncer) GetRemoteClient(ctx context.Context) (*remoteclient.Client, error) {
